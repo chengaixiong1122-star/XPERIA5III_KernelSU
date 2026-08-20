@@ -50,6 +50,12 @@ jobs:
           STUBEOF
           echo "obj-y += ksu_stub.o" >> drivers/Makefile
 
+          # pdx214 uses lahaina defconfig but needs Sony incell/drm_notify symbols
+          # These are provided by dsi_panel_driver.o and incell.o, only built when
+          # CONFIG_DRM_SDE_SPECIFIC_PANEL=y (normally set by sagamidisp.conf)
+          # Merge sagami display config into lahaina so both are active
+          cat techpack/display/config/sagamidisp.conf >> techpack/display/config/lahainadisp.conf
+
       - name: Configure kernel
         run: |
           cd kernel
@@ -70,7 +76,6 @@ jobs:
           CONFIG_KPROBE_EVENTS=y
           CONFIG_MODULES=y
           CONFIG_OVERLAY_FS=y
-          CONFIG_DRM_SDE_SPECIFIC_PANEL=y
           EOF
 
           # Resolve dependencies (single pass)
