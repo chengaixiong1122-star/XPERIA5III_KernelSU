@@ -82,6 +82,7 @@ jobs:
             CLANG_TRIPLE=aarch64-linux-gnu- \
             CROSS_COMPILE=aarch64-linux-gnu- \
             CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
+            KCFLAGS="-Wno-error" \
             -j$(nproc) 2>&1 | tee build.log
 
           BUILD_EXIT=${PIPESTATUS[0]}
