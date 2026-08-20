@@ -43,9 +43,10 @@ jobs:
           # (was supposed to be patched into drivers/input/input.c). Add weak stub.
           cat > drivers/ksu_stub.c << 'STUBEOF'
           #include <linux/types.h>
-          #include <linux/compiler.h>
+          #include <linux/module.h>
 
-          bool __read_mostly ksu_input_hook = false;
+          bool ksu_input_hook = false;
+          EXPORT_SYMBOL(ksu_input_hook);
           STUBEOF
           echo "obj-y += ksu_stub.o" >> drivers/Makefile
 
