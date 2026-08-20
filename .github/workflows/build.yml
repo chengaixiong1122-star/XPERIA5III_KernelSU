@@ -150,7 +150,7 @@ jobs:
           cd AnyKernel3
           sed -i 's/device.name1=.*/device.name1=pdx214/' anykernel.sh
           sed -i 's/do.devicecheck=.*/do.devicecheck=0/' anykernel.sh
-          sed -i 's/is_slot_device=.*/is_slot_device=1/' anykernel.sh
+          sed -i 's/IS_SLOT_DEVICE=.*/IS_SLOT_DEVICE=1;/' anykernel.sh
 
           ZIP="XPERIA5III_KernelSU_$(date +%Y%m%d).zip"
           zip -r9 "../$ZIP" * -x ".git/*"
