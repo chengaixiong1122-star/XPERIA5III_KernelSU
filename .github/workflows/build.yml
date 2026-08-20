@@ -40,21 +40,38 @@ jobs:
             | bash -s legacy
 
           # KernelSU-Next legacy declares extern ksu_input_hook but never defines it
-          # (was supposed to be patched into drivers/input/input.c). Add weak stub.
+          # sec_ts.c references incell_* and drm_register/unregister_client from
+          # dsi_panel_driver.c/incell.c which require Sony sagami-specific header
+          # patches we can't easily enable. Provide no-op stubs for all of them.
           cat > drivers/ksu_stub.c << 'STUBEOF'
           #include <linux/types.h>
           #include <linux/module.h>
+          #include <linux/notifier.h>
+          #include <linux/incell.h>
+          #include <linux/drm_notify.h>
 
           bool ksu_input_hook = false;
           EXPORT_SYMBOL(ksu_input_hook);
+
+          int incell_get_power_status(incell_pw_status *status) { return 0; }
+          EXPORT_SYMBOL(incell_get_power_status);
+
+          int incell_power_lock_ctrl(incell_pw_lock lock, incell_pw_status *status) { return 0; }
+          EXPORT_SYMBOL(incell_power_lock_ctrl);
+
+          int incell_get_display_sod_mode(void) { return 0; }
+          EXPORT_SYMBOL(incell_get_display_sod_mode);
+
+          void incell_control_touch_power(void) {}
+          EXPORT_SYMBOL(incell_control_touch_power);
+
+          int drm_register_client(struct notifier_block *nb) { return 0; }
+          EXPORT_SYMBOL(drm_register_client);
+
+          int drm_unregister_client(struct notifier_block *nb) { return 0; }
+          EXPORT_SYMBOL(drm_unregister_client);
           STUBEOF
           echo "obj-y += ksu_stub.o" >> drivers/Makefile
-
-          # pdx214 uses lahaina defconfig but needs Sony incell/drm_notify symbols
-          # These are provided by dsi_panel_driver.o and incell.o, only built when
-          # CONFIG_DRM_SDE_SPECIFIC_PANEL=y (normally set by sagamidisp.conf)
-          # Merge sagami display config into lahaina so both are active
-          cat techpack/display/config/sagamidisp.conf >> techpack/display/config/lahainadisp.conf
 
       - name: Configure kernel
         run: |
