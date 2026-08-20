@@ -69,8 +69,18 @@ jobs:
             CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
             olddefconfig
 
+          # Disable LTO (causes undefined symbol errors with KSU + sec_ts)
+          scripts/config --file out/.config -d LTO_CLANG -d THINLTO -e LTO_NONE
+          # Disable sec_ts (needs incell/drm modules not built-in)
+          scripts/config --file out/.config -d TOUCHSCREEN_SEC_TS
+          make O=out ARCH=arm64 CC=clang LLVM=1 LLVM_IAS=1 \
+            LD=ld.lld CLANG_TRIPLE=aarch64-linux-gnu- \
+            CROSS_COMPILE=aarch64-linux-gnu- \
+            CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
+            olddefconfig
+
           echo "=== Key configs ==="
-          grep -E "^CONFIG_(KSU|KPROBES|MODULES|OVERLAY_FS|LOCALVERSION)=" out/.config || true
+          grep -E "^CONFIG_(KSU|KPROBES|MODULES|OVERLAY_FS|LTO|LOCALVERSION)=" out/.config || true
 
       - name: Build kernel
         run: |
