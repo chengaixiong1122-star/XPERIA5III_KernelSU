@@ -1,0 +1,138 @@
+name: Build KSU Kernel for Xperia 5 III
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 300
+
+    steps:
+      - name: Install dependencies
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y \
+            bc bison build-essential ccache curl flex git gnupg gperf \
+            libssl-dev libxml2 lzop python3 zip rsync xsltproc zlib1g-dev \
+            clang lld llvm libclang-dev \
+            gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
+            gcc-arm-linux-gnueabi g++-arm-linux-gnueabi
+          echo "=== Versions ==="
+          clang --version | head -1
+          aarch64-linux-gnu-gcc --version | head -1
+          ld.lld --version | head -1
+
+      - name: Clone kernel source
+        run: |
+          git clone --depth=1 -b lineage-23.2 \
+            https://github.com/LineageOS/android_kernel_sony_sm8350.git \
+            kernel
+
+      - name: Apply KernelSU-Next
+        run: |
+          cd kernel
+          curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" \
+            | bash -s legacy
+
+      - name: Configure kernel
+        run: |
+          cd kernel
+
+          # Base: platform defconfig
+          cp arch/arm64/configs/vendor/lahaina-qgki_defconfig .config
+
+          # Device fragment
+          cat arch/arm64/configs/vendor/pdx214.config >> .config
+
+          # KernelSU configs
+          cat >> .config << 'EOF'
+          CONFIG_KSU=y
+          CONFIG_KSU_KPROBE_HOOKS=y
+          CONFIG_KPROBES=y
+          CONFIG_HAVE_KPROBES=y
+          CONFIG_KPROBE_EVENTS=y
+          CONFIG_MODULES=y
+          CONFIG_OVERLAY_FS=y
+          EOF
+
+          # Resolve dependencies
+          make O=. ARCH=arm64 CC=clang LLVM=1 LLVM_IAS=1 \
+            LD=ld.lld AR=llvm-ar NM=llvm-nm \
+            CLANG_TRIPLE=aarch64-linux-gnu- \
+            CROSS_COMPILE=aarch64-linux-gnu- \
+            CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
+            olddefconfig
+
+          echo "=== Key configs ==="
+          grep -E "^CONFIG_(KSU|KPROBES|MODULES|OVERLAY_FS|LOCALVERSION)=" .config || true
+
+      - name: Build kernel
+        run: |
+          cd kernel
+          echo "=== Building with $(nproc) cores ==="
+          make O=. ARCH=arm64 CC=clang LLVM=1 LLVM_IAS=1 \
+            LD=ld.lld AR=llvm-ar NM=llvm-nm \
+            OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip \
+            CLANG_TRIPLE=aarch64-linux-gnu- \
+            CROSS_COMPILE=aarch64-linux-gnu- \
+            CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
+            -j$(nproc) 2>&1 | tee build.log
+
+          BUILD_EXIT=${PIPESTATUS[0]}
+
+          if [ ${BUILD_EXIT} -ne 0 ]; then
+            echo "=== BUILD FAILED (exit ${BUILD_EXIT}) ==="
+            tail -100 build.log
+            exit 1
+          fi
+
+          echo "=== BUILD SUCCESS ==="
+          find out/arch/arm64/boot -name "Image*" -ls 2>/dev/null
+
+      - name: Package AnyKernel3 zip
+        if: success()
+        run: |
+          cd kernel
+          git clone --depth=1 https://github.com/osm0sis/AnyKernel3.git
+
+          # Find kernel image
+          IMAGE=$(find out/arch/arm64/boot -maxdepth 1 -name "Image*" | head -1)
+          if [ -z "$IMAGE" ]; then
+            echo "ERROR: No Image found"
+            ls out/arch/arm64/boot/
+            exit 1
+          fi
+          cp "$IMAGE" AnyKernel3/
+
+          [ -f out/arch/arm64/boot/dtbo.img ] && cp out/arch/arm64/boot/dtbo.img AnyKernel3/
+
+          cd AnyKernel3
+          sed -i 's/device.name1=.*/device.name1=pdx214/' anykernel.sh
+          sed -i 's/do.devicecheck=.*/do.devicecheck=0/' anykernel.sh
+          sed -i 's/is_slot_device=.*/is_slot_device=1/' anykernel.sh
+
+          ZIP="XPERIA5III_KernelSU_$(date +%Y%m%d).zip"
+          zip -r9 "../$ZIP" * -x ".git/*"
+          cd ..
+          echo "=== Zip created ==="
+          ls -lh "$ZIP"
+
+      - name: Upload build log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: kernel/build.log
+
+      - name: Upload kernel zip
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: XPERIA5III_KernelSU
+          path: kernel/XPERIA5III_KernelSU_*.zip
+          retention-days: 30
